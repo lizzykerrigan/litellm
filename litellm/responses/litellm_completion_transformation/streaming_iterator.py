@@ -178,13 +178,32 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
     def create_litellm_model_response(
         self,
     ) -> Optional[ModelResponse]:
-        return cast(
+        model_response = cast(
             Optional[ModelResponse],
             stream_chunk_builder(
                 chunks=self.collected_chat_completion_chunks,
                 logging_obj=self.litellm_logging_obj,
             ),
         )
+
+        # Ensure annotations from chunks are preserved in the final response
+        if model_response and self.collected_chat_completion_chunks:
+            all_annotations = []
+            for chunk in self.collected_chat_completion_chunks:
+                if chunk.choices and hasattr(chunk.choices[0].delta, "annotations"):
+                    chunk_annotations = chunk.choices[0].delta.annotations
+                    if chunk_annotations:
+                        all_annotations.extend(chunk_annotations)
+
+            if all_annotations and model_response.choices:
+                # Attach annotations to the final message
+                if not hasattr(model_response.choices[0].message, "annotations"):
+                    setattr(
+                        model_response.choices[0].message, "annotations", [])
+                # type: ignore
+                model_response.choices[0].message.annotations = all_annotations
+
+        return model_response
 
     def create_output_text_done_event(
         self, litellm_complete_object: ModelResponse
@@ -194,7 +213,9 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
             item_id=f"msg_{str(uuid.uuid4())}",
             output_index=0,
             content_index=0,
-            text=getattr(litellm_complete_object.choices[0].message, "content", "")  # type: ignore
+            # type: ignore
+            text=getattr(
+                litellm_complete_object.choices[0].message, "content", "")
             or "",
         )
 
@@ -202,9 +223,13 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
         self, litellm_complete_object: ModelResponse
     ) -> ContentPartDoneEvent:
 
-        text = getattr(litellm_complete_object.choices[0].message, "content", "") or ""  # type: ignore
-        reasoning_content = getattr(litellm_complete_object.choices[0].message, "reasoning_content", "") or ""  # type: ignore
-        annotations = getattr(litellm_complete_object.choices[0].message, "annotations", None)  # type: ignore
+        # type: ignore
+        text = getattr(
+            litellm_complete_object.choices[0].message, "content", "") or ""
+        reasoning_content = getattr(
+            litellm_complete_object.choices[0].message, "reasoning_content", "") or ""  # type: ignore
+        annotations = getattr(
+            litellm_complete_object.choices[0].message, "annotations", None)  # type: ignore
 
         part: Optional[PART_UNION_TYPES] = None
         if reasoning_content:
@@ -235,8 +260,10 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
     def create_output_item_done_event(
         self, litellm_complete_object: ModelResponse
     ) -> OutputItemDoneEvent:
-        text = self.litellm_model_response.choices[0].message.content or ""  # type: ignore
-        annotations = getattr(self.litellm_model_response.choices[0].message, "annotations", None)  # type: ignore
+        # type: ignore
+        text = self.litellm_model_response.choices[0].message.content or ""
+        annotations = getattr(
+            self.litellm_model_response.choices[0].message, "annotations", None)  # type: ignore
 
         response_annotations = LiteLLMCompletionResponsesConfig._transform_chat_completion_annotations_to_response_output_annotations(
             annotations=annotations
@@ -310,7 +337,8 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
         ):
             self.litellm_model_response = self.create_litellm_model_response()
         if self.litellm_model_response:
-            done_event = self.return_default_done_events(self.litellm_model_response)
+            done_event = self.return_default_done_events(
+                self.litellm_model_response)
             if done_event:
                 return done_event
         else:
@@ -421,13 +449,14 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
                 self.sent_annotation_events = True
                 # Store annotation events to emit them one by one
                 if not hasattr(self, '_pending_annotation_events'):
-                    
+
                     response_annotations = LiteLLMCompletionResponsesConfig._transform_chat_completion_annotations_to_response_output_annotations(
                         annotations=annotations
-                    )                    
+                    )
                     self._pending_annotation_events = []
                     for idx, annotation in enumerate(response_annotations):
-                        annotation_dict = annotation.model_dump() if hasattr(annotation, 'model_dump') else dict(annotation)
+                        annotation_dict = annotation.model_dump() if hasattr(
+                            annotation, 'model_dump') else dict(annotation)
                         event = OutputTextAnnotationAddedEvent(
                             type=ResponsesAPIStreamEvents.OUTPUT_TEXT_ANNOTATION_ADDED,
                             item_id=chunk.id,
@@ -436,7 +465,7 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
                             annotation_index=idx,
                             annotation=annotation_dict,
                         )
-                        self._pending_annotation_events.append(event)        
+                        self._pending_annotation_events.append(event)
         # Priority 1: Handle reasoning content (highest priority)
         if (
             chunk.choices
@@ -451,9 +480,10 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
                 output_index=0,
                 delta=reasoning_content,
             )
-        
+
         # Priority 2: Handle text deltas
-        delta_content = self._get_delta_string_from_streaming_choices(chunk.choices)
+        delta_content = self._get_delta_string_from_streaming_choices(
+            chunk.choices)
         if delta_content:
             return OutputTextDeltaEvent(
                 type=ResponsesAPIStreamEvents.OUTPUT_TEXT_DELTA,
@@ -462,7 +492,7 @@ class LiteLLMCompletionStreamingIterator(ResponsesAPIStreamingIterator):
                 content_index=0,
                 delta=delta_content,
             )
-        
+
         # Priority 3: If we have pending annotation events, emit the next one
         # This happens when the current chunk has no text/reasoning content
         if hasattr(self, '_pending_annotation_events') and self._pending_annotation_events:
