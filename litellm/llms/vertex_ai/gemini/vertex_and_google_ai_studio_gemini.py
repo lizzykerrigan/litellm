@@ -1963,6 +1963,8 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                             content_text=content,
                         )
                     )
+                    verbose_logger.info(
+                        f"[STREAMING DEBUG] Converted annotations: {annotations}")
                     if annotations:
                         # type: ignore
                         chat_completion_message["annotations"] = annotations
@@ -2824,6 +2826,13 @@ class ModelResponseIterator:
                     self.logging_obj.optional_params,
                     cumulative_tool_call_index=self.cumulative_tool_call_index,
                 )
+
+                # DEBUG: Log annotations in streaming
+                if model_response.choices:
+                    for choice in model_response.choices:
+                        if hasattr(choice.delta, 'annotations') and choice.delta.annotations:
+                            verbose_logger.info(
+                                f"[STREAMING] Annotations found in delta: {choice.delta.annotations}")
 
                 setattr(model_response, "vertex_ai_grounding_metadata",
                         grounding_metadata)  # type: ignore
