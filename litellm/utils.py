@@ -7787,6 +7787,9 @@ class ProviderConfigManager:
         
         Uses O(1) dictionary lookup for fast provider resolution.
         """
+        print_verbose(
+            f"ProviderConfigManager: Resolving config for provider={provider}, model={model}", log_level="INFO"
+        )
         # Check JSON providers FIRST (these override standard mappings)
         from litellm.llms.openai_like.dynamic_config import create_config_class
         from litellm.llms.openai_like.json_loader import JSONProviderRegistry
