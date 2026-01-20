@@ -2859,6 +2859,7 @@ class ModelResponseIterator:
             setattr(model_response, "usage", usage)  # type: ignore
 
             model_response._hidden_params["is_finished"] = False
+            verbose_logger.info(f"PROCESSED GEMINI CHUNK: {model_response}")
             return model_response
 
         except json.JSONDecodeError:
